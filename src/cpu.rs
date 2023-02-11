@@ -21,7 +21,7 @@ impl Cpu {
             // return None
         }
         let inst = self.fetch();
-        println!("{inst:08X}");
+        println!("{inst:08X} {}", Self::dec_i(inst));
         self.pc += 4;
         let opcode = (inst & 0x7f) as u8;
         let rd = ((inst >> 7) & 0x1f) as usize;
@@ -45,7 +45,7 @@ impl Cpu {
     }
 
     fn dec_i(inst: u32) -> u16 {
-        (inst & 0xfff00000 >> 20) as u16
+        ((inst & 0xfff00000) as i32 as i64 >> 20) as u16
     }
 
     pub fn show_reg(&self) {
