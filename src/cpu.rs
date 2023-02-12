@@ -1,47 +1,57 @@
-#[derive(Debug)]
+use crate::bus::*;
+
 pub struct Cpu {
     pub rx: [u64; 32],
     pub pc: u64,
-    pub mem: Vec<u8>
+    pub bus: Bus
 }
 
 impl Cpu {
-    pub fn new(mem: Vec<u8>) -> Self {
+    pub fn new(bus: Bus) -> Self {
         let mut rx = [0u64; 32];
-        rx[2] = mem.len() as u64;
+        // rx[2] = mem.len() as u64;
         Self {
             rx,
-            pc: 0,
-            mem
+            pc: DRAM_OFFSET,
+            bus
         }
     }
 
     pub fn step(&mut self) -> Option<()> {
         if self.pc & 3 != 0 {
-            // return None
+            return None
         }
-        let inst = self.fetch();
-        println!("{inst:08X} {}", Self::dec_i(inst));
+        let inst = self.bus.load(self.pc, 3);
+        let inst = match inst {
+            Some(v) => v as u32,
+            None => return None
+        };
         self.pc += 4;
         let opcode = (inst & 0x7f) as u8;
         let rd = ((inst >> 7) & 0x1f) as usize;
         let rs1 = ((inst >> 15) & 0x1f) as usize;
         let rs2 = ((inst >> 20) & 0x1f) as usize;
+        let funct3 = (inst >> 12) & 0x7;
+
+        println!("{:X}", Self::dec_i(inst));
 
         match opcode {
             INST_ADDI   => self.rx[rd] = self.rx[rs1] + Self::dec_i(inst) as u64,
             INST_ADD    => self.rx[rd] = self.rx[rs1] + self.rx[rs2],
-            _ => todo!("{opcode:02X}")
+            INST_L      => {
+                let a = self.bus.load(self.rx[rs1] + Self::dec_i(inst) as u64, (funct3+1) as u8 % 4)?;
+                self.rx[rd] = match funct3 {
+                    0 => a as i8  as i64 as u64,
+                    1 => a as i16 as i64 as u64,
+                    2 => a as i32 as i64 as u64,
+                    3 => a as i64 as u64,
+                    _ => a
+                }
+            },
+            INST_S      => self.bus.store(Self::dec_i(inst) as u64+self.rx[rs1], self.rx[rs2], funct3 as u8 +1).unwrap(),
+            _ => return None
         }
         Some(())
-    }
-
-    fn fetch(&mut self) -> u32 {
-        let index = self.pc as usize;
-           (self.mem[index    ] as u32)
-        | ((self.mem[index + 1] as u32) <<  8)
-        | ((self.mem[index + 2] as u32) << 16)
-        | ((self.mem[index + 3] as u32) << 24)
     }
 
     fn dec_i(inst: u32) -> u16 {
@@ -58,3 +68,5 @@ impl Cpu {
 
 const INST_ADD  : u8 = 0x33;
 const INST_ADDI : u8 = 0x13;
+const INST_L    : u8 = 0x03;
+const INST_S    : u8 = 0x23;
